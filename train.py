@@ -11,7 +11,9 @@ from fights.envs import othello
 
 from mctsAI import MCTSAgent
 
-SP_GAME_COUNT = 10
+from dual_network import save_network
+
+SP_GAME_COUNT = 500
 RN_EPOCHS = 100
 
 
@@ -42,7 +44,6 @@ def evaluate_network(current_agent):
                     state, agent.agent_id, action)
 
                 if state.done:
-                    print(f"game {game_id} is done!!")
                     if state.reward[0] == 1:
                         win_rate[0] += 1
                     elif state.reward[1] == 1:
@@ -67,7 +68,6 @@ def evaluate_network(current_agent):
                     state, agent.agent_id, action)
 
                 if state.done:
-                    print(f"game {game_id} is done!!")
                     if state.reward[0] == 1:
                         win_rate[1] += 1
                     elif state.reward[1] == 1:
@@ -76,6 +76,7 @@ def evaluate_network(current_agent):
                         win_rate[2] += 1
                     break
 
+    print(win_rate[0], win_rate[1])
     return win_rate[0] > win_rate[1]
 
 
@@ -95,11 +96,21 @@ def self_play(current_agent):
                 current_agent.agent_id = agent_id
 
                 policy = current_agent.MCTS(state)
+                sparse_policy = []
+                id = 0
+                for col_r in range(8):
+                    for col_c in range(8):
+                        if state.legal_actions[agent_id][col_r][col_c]:
+                            sparse_policy.append(policy[id])
+                            id += 1
+                        else:
+                            sparse_policy.append(0)
+                sparse_policy = np.array(sparse_policy)
                 if agent_id == 0:
-                    history.append([state.board, policy, None])
+                    history.append([state.board, sparse_policy, None])
                 else:
                     flipped_board = np.array((state.board[1], state.board[0]))
-                    history.append([flipped_board, policy, None])
+                    history.append([flipped_board, sparse_policy, None])
                 action = current_agent.select_action(state, policy)
                 state = othello.OthelloEnv().step(state, agent_id, action)
 
@@ -129,16 +140,18 @@ def train(current_agent, learning_rate, epoch_num, batch_size):
 
         batch_data = current_agent.saved_data.pull(batch_size)
 
-        s_tensor = torch.from_numpy(np.array(batch_data[0])).to(
-            current_agent.device)
-        a_tensor = torch.tensor(np.array(batch_data[1])).to(
-            current_agent.device)
-        v_tensor = torch.tensor(np.array(batch_data[2])).to(
-            current_agent.device)
+        s_tensor = torch.from_numpy(
+            np.array(batch_data[0], dtype=np.float32)).to(current_agent.device)
+        a_tensor = torch.tensor(
+            np.array(batch_data[1], dtype=np.float32)).to(current_agent.device)
+        v_tensor = torch.tensor(
+            np.array(batch_data[2], dtype=np.float32)).to(current_agent.device)
 
         prediction = current_agent.model.forward(s_tensor)
-        loss = criterion(prediction, (a_tensor, v_tensor)).to(
-            current_agent.device)
+        prediction = (prediction[0].squeeze(), prediction[1].squeeze())
+        prediction = torch.cat((prediction[0], prediction[1].unsqueeze(1)), dim=1)
+        y = torch.cat((a_tensor, v_tensor.unsqueeze(1)), dim=1)
+        loss = criterion(prediction, y).to(current_agent.device)
 
         optimizer.zero_grad()
         loss.backward()
@@ -158,10 +171,10 @@ def train_cycle():
     batch_size = 128
     train_time = 10
 
-    agent = MCTSAgent(agent_id=0, simulation_cnt=simulation_cnt, tau=tau)
-
     for i in range(train_time):
         print('Train', i, '====================')
+
+        agent = MCTSAgent(agent_id=0, simulation_cnt=simulation_cnt, tau=tau)
 
         self_play(agent)
 
@@ -170,7 +183,8 @@ def train_cycle():
               epoch_num=epoch_num,
               batch_size=batch_size)
 
-        evaluate_network(agent)
+        if evaluate_network(agent):
+            save_network(agent.model, 'best')
 
 
 if __name__ == '__main__':
