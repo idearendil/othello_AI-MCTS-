@@ -11,7 +11,7 @@ from fights.envs import othello
 
 from mctsAI import MCTSAgent
 
-SP_GAME_COUNT = 500
+SP_GAME_COUNT = 10
 RN_EPOCHS = 100
 
 
@@ -108,7 +108,8 @@ def self_play(current_agent):
 
         for record_id, record in enumerate(history):
             record[2] = state.reward[record_id % 2]
-            current_agent.push((record[0], record[1], record[2]))
+            current_agent.saved_data.push((record[0], record[1], record[2]))
+        print(len(history))
 
     return
 

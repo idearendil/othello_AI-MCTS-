@@ -53,9 +53,9 @@ class DualNetwork(nn.Module):
         x = self.first_layer(x)
         for i in range(DN_RESIDUAL_NUM):
             x = self.layers[i](x)
-        x = F.avg_pool2d(x, DN_INPUT_SHAPE[2])
-        p = F.softmax(self.policy_layer(x))
-        v = F.tanh(self.value_layer(x))
+        x = F.avg_pool2d(x, DN_INPUT_SHAPE[0]).squeeze().unsqueeze(0)
+        p = F.softmax(self.policy_layer(x), dim=1)
+        v = F.tanh(self.value_layer(x)).squeeze(1)
         return p, v
 
 

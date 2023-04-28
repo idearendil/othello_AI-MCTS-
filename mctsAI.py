@@ -84,6 +84,8 @@ class MCTSAgent(BaseAgent):
             reset_network(self.device, 'best')
             self.model = load_network(self.device, 'best')
         self.model.to(self.device)
+        for i in range(16):
+            self.model.layers[i].to(self.device)
         self.simulation_cnt = simulation_cnt
         self.tau = tau
         self.saved_data = SavedData(device=self.device)
@@ -93,17 +95,21 @@ class MCTSAgent(BaseAgent):
         return self.select_action(state, scores)
 
     def _observe_state(self, state: othello.OthelloState, agent_id):
-        return torch.Tensor(state.perspective(agent_id)).to(self.device)
+        board = state.perspective(agent_id).copy()
+        return torch.Tensor(board).to(self.device)
 
     def _predict(self, state: othello.OthelloState, agent_id):
         observation = self._observe_state(state, agent_id)
-        y = self.model.forward(observation)
-        y = (y[0].cpu().numpy(), y[1].cpu().numpy())
+        observation = observation.unsqueeze(0)
+        with torch.no_grad():
+            self.model.eval()
+            y = self.model.forward(observation)
+            y = (y[0].squeeze().cpu().numpy(), y[1].cpu().numpy())
 
-        policy = y[0][0] * np.reshape(state.legal_actions[agent_id], (64))
+        policy = y[0] * np.reshape(state.legal_actions[agent_id], (64))
         policy /= sum(policy)
 
-        value = y[0][1] if self.agent_id == agent_id else 1 - y[0][1]
+        value = y[1][0]
 
         return policy, value
 
@@ -114,7 +120,7 @@ class MCTSAgent(BaseAgent):
         sum_exp_weights = np.sum(exp_weights)
         final_weights = exp_weights / sum_exp_weights
         # print(final_weights)
-        return final_weights
+        return np.float32(final_weights)
 
     def MCTS(self, state):
         """
@@ -136,8 +142,8 @@ class MCTSAgent(BaseAgent):
             return scores
 
         def evaluate_node(node, agent_id):
-            if node.state.values[0] != 0:
-                value = node.state.values[self.agent_id]
+            if node.state.reward[0] != 0:
+                value = node.state.reward[agent_id]
                 node.w += value
                 node.n += 1
                 return value
@@ -157,7 +163,7 @@ class MCTSAgent(BaseAgent):
             else:
                 next_child_node = select_next_node(node.child_nodes)
                 value = evaluate_node(next_child_node, 1-agent_id)
-                node.w += value
+                node.w += -value
                 node.n += 1
                 return value
 
@@ -176,7 +182,7 @@ class MCTSAgent(BaseAgent):
 
         scores = nodes_to_scores(root_node.child_nodes)
         if self.agent_id:
-            scores = scores.reverse()
+            scores.reverse()
         scores = np.array(scores, dtype=np.float32)
         if self.tau == 0:
             action = np.argmax(scores)
@@ -192,4 +198,4 @@ class MCTSAgent(BaseAgent):
             for col_c in range(8):
                 if state.legal_actions[self.agent_id][col_r][col_c]:
                     possible_actions.append((col_r, col_c))
-        return random.choices(possible_actions, weights=tuple(scores), k=1)[0]
+        return random.choices(possible_actions, weights=scores, k=1)[0]
