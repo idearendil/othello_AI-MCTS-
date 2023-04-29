@@ -12,6 +12,7 @@ from fights.envs import othello
 
 from randomAI import RandomAgent
 from manual import ManualAgent
+from mctsAI import MCTSAgent
 
 sys.path.append("../")
 
@@ -35,11 +36,11 @@ def run():
     colorama.init()
 
     state = othello.OthelloEnv().initialize_state()
-    agents = [RandomAgent(0), RandomAgent(1)]
+    agents = [MCTSAgent(0), MCTSAgent(1)]
 
     while not state.done:
 
-        print("\x1b[1;1H")
+        # print("\x1b[1;1H")
         print(fallback_to_ascii(str(state)))
 
         for agent in agents:
@@ -47,7 +48,7 @@ def run():
             action = agent(state)
             state = othello.OthelloEnv().step(state, agent.agent_id, action)
 
-            print("\x1b[1;1H")
+            # print("\x1b[1;1H")
             print(fallback_to_ascii(str(state)))
 
             pause = input()

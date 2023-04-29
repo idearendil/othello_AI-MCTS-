@@ -142,7 +142,7 @@ class MCTSAgent(BaseAgent):
             return scores
 
         def evaluate_node(node, agent_id):
-            if node.state.reward[0] != 0:
+            if node.state.done:
                 value = node.state.reward[agent_id]
                 node.w += value
                 node.n += 1
@@ -162,8 +162,8 @@ class MCTSAgent(BaseAgent):
                 return value
             else:
                 next_child_node = select_next_node(node.child_nodes)
-                value = evaluate_node(next_child_node, 1-agent_id)
-                node.w += -value
+                value = -evaluate_node(next_child_node, 1-agent_id)
+                node.w += value
                 node.n += 1
                 return value
 

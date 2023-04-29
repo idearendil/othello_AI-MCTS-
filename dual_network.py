@@ -59,6 +59,31 @@ class DualNetwork(nn.Module):
         return p, v
 
 
+class DummyNetwork(nn.Module):
+    """
+    This is the definition of DummyNetwork
+    """
+    def __init__(self):
+        super(DummyNetwork, self).__init__()
+
+        self.conv1 = nn.Conv2d(2, 16, 3, 1, 1)
+        self.conv2 = nn.Conv2d(16, 16, 3, 1, 1)
+        self.fc1 = nn.Linear(16 * 8 * 8, 120)
+        self.fc2 = nn.Linear(120, 84)
+        self.policy_layer = nn.Linear(84, DN_OUTPUT_SIZE)
+        self.value_layer = nn.Linear(84, 1)
+
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = torch.flatten(x, 1)  # flatten all dimensions except batch
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        p = F.softmax(self.policy_layer(x), dim=1)
+        v = F.tanh(self.value_layer(x)).squeeze(1)
+        return p, v
+
+
 def save_network(model, model_name):
     """
     Saving neural network model in ./model file with model_name.

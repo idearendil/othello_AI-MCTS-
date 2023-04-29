@@ -13,8 +13,9 @@ from mctsAI import MCTSAgent
 
 from dual_network import save_network
 
-SP_GAME_COUNT = 500
-RN_EPOCHS = 100
+SP_GAME_COUNT = 100  # 500
+TEST_GAME_COUNT = 20  # 100
+RN_EPOCHS = 100  # 100
 
 
 def evaluate_network(current_agent):
@@ -31,7 +32,7 @@ def evaluate_network(current_agent):
     current_agent.agent_id = 0
     agents = [current_agent, MCTSAgent(1)]
 
-    for game_id in range(50):
+    for _ in range(TEST_GAME_COUNT // 2):
 
         state = othello.OthelloEnv().initialize_state()
 
@@ -52,10 +53,11 @@ def evaluate_network(current_agent):
                         win_rate[2] += 1
                     break
 
+    print(win_rate[0], win_rate[1])
     current_agent.agent_id = 1
     agents = [MCTSAgent(0), current_agent]
 
-    for game_id in range(50):
+    for _ in range(TEST_GAME_COUNT // 2):
 
         state = othello.OthelloEnv().initialize_state()
 
@@ -85,7 +87,8 @@ def self_play(current_agent):
     Executes self play and collect records from the games.
     """
 
-    for _ in range(SP_GAME_COUNT):
+    for game_id in range(SP_GAME_COUNT):
+        print(game_id)
         state = othello.OthelloEnv().initialize_state()
 
         history = []
@@ -120,7 +123,6 @@ def self_play(current_agent):
         for record_id, record in enumerate(history):
             record[2] = state.reward[record_id % 2]
             current_agent.saved_data.push((record[0], record[1], record[2]))
-        print(len(history))
 
     return
 
@@ -132,11 +134,11 @@ def train(current_agent, learning_rate, epoch_num, batch_size):
 
     current_agent.model.train()
 
-    criterion = nn.MSELoss()
-    optimizer = torch.optim.SGD(current_agent.model.parameters(),
-                                lr=learning_rate)
+    criterion = nn.MSELoss(size_average=False)
+    optimizer = torch.optim.Adam(current_agent.model.parameters(),
+                                 lr=learning_rate)
 
-    for _ in range(epoch_num):
+    for epoch_id in range(epoch_num):
 
         batch_data = current_agent.saved_data.pull(batch_size)
 
@@ -152,6 +154,8 @@ def train(current_agent, learning_rate, epoch_num, batch_size):
         prediction = torch.cat((prediction[0], prediction[1].unsqueeze(1)), dim=1)
         y = torch.cat((a_tensor, v_tensor.unsqueeze(1)), dim=1)
         loss = criterion(prediction, y).to(current_agent.device)
+        if epoch_id == epoch_num - 1:
+            print(loss.item())
 
         optimizer.zero_grad()
         loss.backward()
@@ -166,7 +170,7 @@ def train_cycle():
 
     simulation_cnt = 100
     tau = 1.0
-    learning_rate = 0.0001
+    learning_rate = 0.001
     epoch_num = 100
     batch_size = 128
     train_time = 10

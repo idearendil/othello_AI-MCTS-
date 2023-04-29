@@ -2,8 +2,6 @@
 Othello ai agent model with manual policy.
 """
 
-import numpy as np
-
 from fights.base import BaseAgent
 from fights.envs import othello
 
