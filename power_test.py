@@ -7,6 +7,7 @@ from fights.envs import othello
 
 from randomAI import RandomAgent
 from mctsAI import MCTSAgent
+from alphabetaAI import AlphaBetaAgent
 
 
 def run():
@@ -19,7 +20,7 @@ def run():
     for game_id in range(50):
 
         state = othello.OthelloEnv().initialize_state()
-        agents = [RandomAgent(0, seed=game_id), MCTSAgent(1)]
+        agents = [MCTSAgent(0), AlphaBetaAgent(1, 3, 0)]
 
         while not state.done:
 
