@@ -64,7 +64,7 @@ class DummyNetwork(nn.Module):
     This is the definition of DummyNetwork
     """
     def __init__(self):
-        super(DummyNetwork, self).__init__()
+        super().__init__()
 
         self.conv1 = nn.Conv2d(2, 16, 3, 1, 1)
         self.conv2 = nn.Conv2d(16, 16, 3, 1, 1)
@@ -98,7 +98,7 @@ def save_network(model, model_name):
     torch.save(model.state_dict(), file_name)
 
 
-def load_network(device, model_name) -> DualNetwork:
+def load_network(device, model_name) -> DummyNetwork:
     """
     Load neural network model with model_name from ./model file.
 
@@ -109,7 +109,7 @@ def load_network(device, model_name) -> DualNetwork:
         The name of model which will be loaded.
     """
     model_path = './model/' + model_name + '.pt'
-    model = DualNetwork().to(device)
+    model = DummyNetwork().to(device)
     model.load_state_dict(torch.load(model_path))
     return model
 
@@ -124,5 +124,5 @@ def reset_network(device, model_name):
     :arg model_name:
         The name of model which will be resetted.
     """
-    model = DualNetwork().to(device)
+    model = DummyNetwork().to(device)
     save_network(model, model_name)

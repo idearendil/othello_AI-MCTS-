@@ -15,80 +15,30 @@ from dual_network import load_network
 from dual_network import reset_network
 
 
-class SavedData():
-    """
-    Class of saved game play data.
-    This saved data includes functions such as push and pull.
-    Each data consists of state, action, value.
-    """
-    def __init__(self, device):
-        self.buffer = []
-        self.device = device
-
-    def push(self, data):
-        """
-        Push one set of data into buffer.
-
-        :arg data:
-            data should be a tuple of state, action, value.
-        """
-        self.buffer.append(data)
-
-    def pull(self, data_size):
-        """
-        Pull data of size data_size from buffer.
-
-        :arg data_size:
-            The size of data which will be pulled from buffer.
-
-        :return:
-            A tuple which consists of lists of state, action, value.
-        """
-        minibatch = random.sample(self.buffer, data_size)
-        s_lst, a_lst, v_lst = [], [], []
-
-        for data in minibatch:
-            state, action, value = data
-            s_lst.append(state)
-            a_lst.append(action)
-            v_lst.append(value)
-
-        return s_lst, a_lst, v_lst
-
-    def size(self):
-        """
-        Return the size of buffer.
-        """
-        return len(self.buffer)
-
-    def clear(self):
-        """
-        Clear all saved data.
-        """
-        self.buffer = []
-
-
 class MCTSAgent(BaseAgent):
     """
     The MCTS agent.
     """
     env_id = ("othello", 0)  # type: ignore
 
-    def __init__(self, agent_id: int, simulation_cnt=100, tau=1.0) -> None:
+    def __init__(self,
+                 agent_id: int,
+                 simulation_cnt=100,
+                 tau=1.0,
+                 model_name='best') -> None:
         self.agent_id = agent_id  # type: ignore
         self.device = torch.device(
             "cuda:0" if torch.cuda.is_available() else "cpu")
         try:
-            self.model = load_network(self.device, 'best')
+            self.model = load_network(self.device, model_name)
         except FileNotFoundError:
-            reset_network(self.device, 'best')
-            self.model = load_network(self.device, 'best')
+            reset_network(self.device, model_name)
+            self.model = load_network(self.device, model_name)
         self.model.to(self.device)
-        for i in range(16):
-            self.model.layers[i].to(self.device)
+        # for i in range(16):
+        #     self.model.layers[i].to(self.device)
         self.simulation_cnt = simulation_cnt
         self.tau = tau
-        self.saved_data = SavedData(device=self.device)
 
     def __call__(self, state: othello.OthelloState) -> othello.OthelloAction:
         scores = self.MCTS(state)
@@ -104,12 +54,17 @@ class MCTSAgent(BaseAgent):
         with torch.no_grad():
             self.model.eval()
             y = self.model.forward(observation)
-            y = (y[0].squeeze().cpu().numpy(), y[1].cpu().numpy())
+            if agent_id:
+                y = (np.flip(y[0].squeeze().cpu().numpy()),
+                     y[1].squeeze().cpu().numpy())
+            else:
+                y = (y[0].squeeze().cpu().numpy(),
+                     y[1].squeeze().cpu().numpy())
 
         policy = y[0] * np.reshape(state.legal_actions[agent_id], (64))
         policy /= sum(policy)
 
-        value = y[1][0]
+        value = y[1]
 
         return policy, value
 
@@ -120,7 +75,7 @@ class MCTSAgent(BaseAgent):
         sum_exp_weights = np.sum(exp_weights)
         final_weights = exp_weights / sum_exp_weights
         # print(final_weights)
-        return np.float32(final_weights)
+        return final_weights
 
     def MCTS(self, state):
         """
@@ -137,8 +92,8 @@ class MCTSAgent(BaseAgent):
 
         def nodes_to_scores(nodes):
             scores = []
-            for c in nodes:
-                scores.append(c.n)
+            for node in nodes:
+                scores.append(node.n)
             return scores
 
         def evaluate_node(node, agent_id):
@@ -181,8 +136,6 @@ class MCTSAgent(BaseAgent):
             evaluate_node(root_node, self.agent_id)
 
         scores = nodes_to_scores(root_node.child_nodes)
-        if self.agent_id:
-            scores.reverse()
         scores = np.array(scores, dtype=np.float32)
         if self.tau == 0:
             action = np.argmax(scores)
@@ -193,9 +146,6 @@ class MCTSAgent(BaseAgent):
         return scores
 
     def select_action(self, state, scores):
-        possible_actions = []
-        for col_r in range(8):
-            for col_c in range(8):
-                if state.legal_actions[self.agent_id][col_r][col_c]:
-                    possible_actions.append((col_r, col_c))
+        possible_actions = np.transpose(
+            np.nonzero(state.legal_actions[self.agent_id]))
         return random.choices(possible_actions, weights=scores, k=1)[0]
