@@ -16,12 +16,12 @@ from dual_network import save_network
 from dual_network import load_network
 from saved_data import SavedData
 
-TRAIN_GAME_NUM = 100  # 500
-TEST_GAME_NUM = 20  # 100
+TRAIN_GAME_NUM = 200  # 500
+TEST_GAME_NUM = 40  # 100
 PROCESS_NUM = 8
 
-LEARNING_RATE = 1e-4
-EPOCH_NUM = 20  # 100
+LEARNING_RATE = 1e-3
+EPOCH_NUM = 40
 BATCH_SIZE = 1024
 CYCLE_NUM = 100
 

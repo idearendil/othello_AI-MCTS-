@@ -10,8 +10,6 @@ import numpy as np
 
 from fights.envs import othello
 
-from randomAI import RandomAgent
-from manual import ManualAgent
 from mctsAI import MCTSAgent
 
 sys.path.append("../")

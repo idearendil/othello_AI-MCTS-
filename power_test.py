@@ -5,7 +5,6 @@ Plays 100 games and prints the win rate of each agent.
 
 from fights.envs import othello
 
-from randomAI import RandomAgent
 from mctsAI import MCTSAgent
 from alphabetaAI import AlphaBetaAgent
 
@@ -20,7 +19,7 @@ def run():
     for game_id in range(50):
 
         state = othello.OthelloEnv().initialize_state()
-        agents = [MCTSAgent(0), AlphaBetaAgent(1, 3, 0)]
+        agents = [AlphaBetaAgent(0, 3, 0), MCTSAgent(1)]
 
         while not state.done:
 

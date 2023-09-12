@@ -2,34 +2,69 @@
 This file defines dual network, which is the neural network of mctsAI.
 """
 
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-DN_FILTERS = 128
-DN_RESIDUAL_NUM = 16
-DN_INPUT_SHAPE = (8, 8, 2)
-DN_OUTPUT_SIZE = 64
+FILTERS_NUM = 64  # 128
+RESIDUAL_NUM = 4  # 16
+INPUT_SHAPE = (2, 8, 8)
+POLICY_OUTPUT_SIZE = 64
+HIDDEN_LAYER_SIZE = 128  # 256
+
+
+def calc_conv2d_output(h_w, kernel_size=1, stride=1, pad=0, dilation=1):
+    """takes a tuple of (h,w) and returns a tuple of (h,w)"""
+
+    if not isinstance(kernel_size, tuple):
+        kernel_size = (kernel_size, kernel_size)
+    h = math.floor(((h_w[0] + (2 * pad) - (
+        dilation * (kernel_size[0] - 1)) - 1) / stride) + 1)
+    w = math.floor(((h_w[1] + (2 * pad) - (
+        dilation * (kernel_size[1] - 1)) - 1) / stride) + 1)
+    return h, w
 
 
 class ResidualBlock(nn.Module):
     """
     This is the definition of a basic residual block of Dual_Network
     """
-    def __init__(self):
-        super(ResidualBlock, self).__init__()
 
-        self.layer = nn.Sequential(
-            nn.Conv2d(DN_FILTERS, DN_FILTERS, 3, 1, padding="same"),
-            nn.BatchNorm2d(DN_FILTERS),
+    def __init__(self) -> None:
+        super().__init__()
+
+        self.conv_block1 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=FILTERS_NUM,
+                out_channels=FILTERS_NUM,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+                bias=False,
+            ),
+            nn.BatchNorm2d(num_features=FILTERS_NUM),
             nn.ReLU(),
-            nn.Conv2d(DN_FILTERS, DN_FILTERS, 3, 1, padding="same"),
-            nn.BatchNorm2d(DN_FILTERS),
         )
 
-    def forward(self, x):
-        out = self.layer(x)
-        out = F.relu(out + x)
+        self.conv_block2 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=FILTERS_NUM,
+                out_channels=FILTERS_NUM,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+                bias=False,
+            ),
+            nn.BatchNorm2d(num_features=FILTERS_NUM),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        residual = x
+        out = self.conv_block1(x)
+        out = self.conv_block2(out)
+        out += residual
+        out = F.relu(out)
         return out
 
 
@@ -37,25 +72,69 @@ class DualNetwork(nn.Module):
     """
     This is the definition of DualNetwork
     """
-    def __init__(self):
-        super(DualNetwork, self).__init__()
 
-        self.first_layer = nn.Sequential(
-            nn.Conv2d(DN_INPUT_SHAPE[2], DN_FILTERS, 3, 1, padding="same"),
-            nn.BatchNorm2d(DN_FILTERS),
-            nn.ReLU(),
+    def __init__(self) -> None:
+        super().__init__()
+        c, h, w = INPUT_SHAPE
+        conv_out_hw = calc_conv2d_output((h, w), 3, 1, 1)
+        conv_out = conv_out_hw[0] * conv_out_hw[1]
+
+        self.conv_block = nn.Sequential(
+            nn.Conv2d(
+                in_channels=c,
+                out_channels=FILTERS_NUM,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+                bias=False,
+            ),
+            nn.BatchNorm2d(num_features=FILTERS_NUM),
+            nn.ReLU()
         )
-        self.layers = [ResidualBlock() for _ in range(DN_RESIDUAL_NUM)]
-        self.policy_layer = nn.Linear(DN_FILTERS, DN_OUTPUT_SIZE)
-        self.value_layer = nn.Linear(DN_FILTERS, 1)
 
-    def forward(self, x):
-        x = self.first_layer(x)
-        for i in range(DN_RESIDUAL_NUM):
-            x = self.layers[i](x)
-        x = F.avg_pool2d(x, DN_INPUT_SHAPE[0]).squeeze().unsqueeze(0)
-        p = F.softmax(self.policy_layer(x), dim=1)
-        v = F.tanh(self.value_layer(x)).squeeze(1)
+        res_blocks = []
+        for _ in range(RESIDUAL_NUM):
+            res_blocks.append(ResidualBlock())
+        self.res_blocks = nn.Sequential(*res_blocks)
+
+        self.policy_head = nn.Sequential(
+            nn.Conv2d(
+                in_channels=FILTERS_NUM,
+                out_channels=2,
+                kernel_size=1,
+                stride=1,
+                bias=False,
+            ),
+            nn.BatchNorm2d(num_features=2),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(2 * conv_out, POLICY_OUTPUT_SIZE)
+        )
+
+        self.value_head = nn.Sequential(
+            nn.Conv2d(
+                in_channels=FILTERS_NUM,
+                out_channels=1,
+                kernel_size=1,
+                stride=1,
+                bias=False,
+            ),
+            nn.BatchNorm2d(num_features=1),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(1 * conv_out, HIDDEN_LAYER_SIZE),
+            nn.ReLU(),
+            nn.Linear(HIDDEN_LAYER_SIZE, 1),
+            nn.Tanh()
+        )
+
+    def forward(self, x: torch.Tensor):
+        conv_block_out = self.conv_block(x)
+        features = self.res_blocks(conv_block_out)
+
+        p = self.policy_head(features)
+        v = self.value_head(features)
+
         return p, v
 
 
@@ -70,7 +149,7 @@ class DummyNetwork(nn.Module):
         self.conv2 = nn.Conv2d(16, 16, 3, 1, 1)
         self.fc1 = nn.Linear(16 * 8 * 8, 120)
         self.fc2 = nn.Linear(120, 84)
-        self.policy_layer = nn.Linear(84, DN_OUTPUT_SIZE)
+        self.policy_layer = nn.Linear(84, POLICY_OUTPUT_SIZE)
         self.value_layer = nn.Linear(84, 1)
 
     def forward(self, x):
